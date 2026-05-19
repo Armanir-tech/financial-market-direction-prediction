@@ -54,8 +54,9 @@ def _sklearn_models(random_state: int = 42) -> dict[str, Pipeline]:
     }
 
 
-def evaluate_classical_models(feature_table: pd.DataFrame) -> pd.DataFrame:
+def evaluate_classical_models(feature_table: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame]:
     rows = []
+    prediction_rows = []
     for ticker, asset_df in feature_table.groupby("Ticker", sort=False):
         asset_name = asset_df["Asset"].iloc[0]
         train = asset_df[asset_df["period"] == "train"].sort_values("Date")
@@ -79,6 +80,9 @@ def evaluate_classical_models(feature_table: pd.DataFrame) -> pd.DataFrame:
                 y_score = model.predict_proba(x_test)[:, 1] if hasattr(model, "predict_proba") else None
                 metrics = _classification_metrics(y_test, y_pred, y_score)
                 rows.append({"Ticker": ticker, "Asset": asset_name, "Model": model_name, "Period": period.name, "N": len(test), **metrics})
+                prediction_rows.extend(
+                    _prediction_rows(ticker, asset_name, model_name, period.name, test["Date"], y_test, y_pred, y_score)
+                )
 
         for period in EVALUATION_PERIODS:
             test = asset_df[asset_df["period"] == period.name].sort_values("Date")
@@ -88,20 +92,26 @@ def evaluate_classical_models(feature_table: pd.DataFrame) -> pd.DataFrame:
             y_pred = test["prev_direction"].astype(int).to_numpy()
             metrics = _classification_metrics(y_true, y_pred)
             rows.append({"Ticker": ticker, "Asset": asset_name, "Model": "Momentum Baseline", "Period": period.name, "N": len(test), **metrics})
+            prediction_rows.extend(
+                _prediction_rows(ticker, asset_name, "Momentum Baseline", period.name, test["Date"], y_true, y_pred, None)
+            )
 
-    return pd.DataFrame(rows)
+    return pd.DataFrame(rows), pd.DataFrame(prediction_rows)
 
 
-def evaluate_lstm(feature_table: pd.DataFrame, sequence_length: int = 20, epochs: int = 20, random_state: int = 42) -> pd.DataFrame:
+def evaluate_lstm(
+    feature_table: pd.DataFrame, sequence_length: int = 20, epochs: int = 20, random_state: int = 42
+) -> tuple[pd.DataFrame, pd.DataFrame]:
     try:
         import tensorflow as tf
         from tensorflow import keras
     except Exception as exc:
         warnings.warn(f"TensorFlow is unavailable; LSTM evaluation skipped: {exc}")
-        return pd.DataFrame()
+        return pd.DataFrame(), pd.DataFrame()
 
     tf.keras.utils.set_random_seed(random_state)
     rows = []
+    prediction_rows = []
 
     for ticker, asset_df in feature_table.groupby("Ticker", sort=False):
         asset_df = asset_df.sort_values("Date").reset_index(drop=True)
@@ -138,8 +148,10 @@ def evaluate_lstm(feature_table: pd.DataFrame, sequence_length: int = 20, epochs
             y_pred = (y_score >= 0.5).astype(int)
             metrics = _classification_metrics(y_test, y_pred, y_score)
             rows.append({"Ticker": ticker, "Asset": asset_name, "Model": "LSTM", "Period": period.name, "N": len(y_test), **metrics})
+            dates = asset_df.loc[indices[: len(y_test)], "Date"]
+            prediction_rows.extend(_prediction_rows(ticker, asset_name, "LSTM", period.name, dates, y_test, y_pred, y_score))
 
-    return pd.DataFrame(rows)
+    return pd.DataFrame(rows), pd.DataFrame(prediction_rows)
 
 
 def _make_sequences(features: np.ndarray, target: np.ndarray, end_indices: np.ndarray, sequence_length: int) -> tuple[np.ndarray, np.ndarray]:
@@ -151,3 +163,29 @@ def _make_sequences(features: np.ndarray, target: np.ndarray, end_indices: np.nd
         x_values.append(features[start_idx : end_idx + 1])
         y_values.append(target[end_idx])
     return np.asarray(x_values, dtype=np.float32), np.asarray(y_values, dtype=np.int32)
+
+
+def _prediction_rows(
+    ticker: str,
+    asset_name: str,
+    model_name: str,
+    period: str,
+    dates: pd.Series,
+    y_true: np.ndarray,
+    y_pred: np.ndarray,
+    y_score: np.ndarray | None,
+) -> list[dict[str, object]]:
+    scores = y_score if y_score is not None else np.full(len(y_true), np.nan)
+    return [
+        {
+            "Date": pd.Timestamp(date).date().isoformat(),
+            "Ticker": ticker,
+            "Asset": asset_name,
+            "Model": model_name,
+            "Period": period,
+            "Actual": int(actual),
+            "Predicted": int(predicted),
+            "Score": float(score) if not np.isnan(score) else np.nan,
+        }
+        for date, actual, predicted, score in zip(dates, y_true, y_pred, scores)
+    ]

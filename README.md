@@ -65,11 +65,25 @@ The latest run generated 4,329 engineered observations and 84 model evaluation r
 
 See [`reports/final_report.md`](reports/final_report.md) and [`reports/results/metrics.csv`](reports/results/metrics.csv) for full results.
 
+## Turkce Ozet
+
+Bu proje, universitedeki makine ogrenmesi odevi icin hazirlanmis bir finansal piyasa yon tahmini calismasidir. Amac, ABD-Iran catisma sureci etrafinda finansal varliklarin bir sonraki gun yukselip yukselmeyecegini tahmin etmek ve farkli modellerin performanslarini karsilastirmaktir.
+
+Hocanin vurguladigi uc nokta proje icinde karsilanmistir:
+
+- Guncel veri: Veriler Yahoo Finance uzerinden proje tarihine kadar otomatik cekilir.
+- Zaman araligi: Savas oncesi, savas donemi ve ateskes sonrasi ayrimi kullanilir.
+- Mantiksal yorum: Sonuclar altin, petrol, VIX ve piyasa belirsizligi gibi ekonomik gerekcelerle yorumlanir.
+
+Turkce ayrintili rapor icin [`reports/turkce_rapor.md`](reports/turkce_rapor.md) dosyasina bakilabilir.
+
 ## Figures
 
 ![Accuracy heatmap](reports/figures/accuracy_heatmap.png)
 
 ![F1 heatmap](reports/figures/f1_heatmap.png)
+
+Example confusion matrices are also generated for the strongest model-period cases.
 
 ## How to Run
 
@@ -95,6 +109,7 @@ data/processed/        engineered feature table
 reports/results/       model metrics
 reports/figures/       plots and heatmaps
 reports/final_report.md
+reports/turkce_rapor.md
 ```
 
 ## Notes
